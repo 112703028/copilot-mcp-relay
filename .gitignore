@@ -1,0 +1,5 @@
+.env
+github-poller-state.json
+github-poller-state.tmp
+node_modules
+.superpowers

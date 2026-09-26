@@ -1,0 +1,23 @@
+{
+  "name": "copilot-bridge",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test-copilot.mjs",
+    "test:unit": "node --test test/",
+    "start": "node server.mjs",
+    "poll": "node github-poller.mjs",
+    "mcp": "node mcp-relay.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@github/copilot-sdk": "^1.0.14",
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "dotenv": "^18.0.4",
+    "zod": "^4.6.5"
+  }
+}
