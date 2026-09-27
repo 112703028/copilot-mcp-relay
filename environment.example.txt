@@ -1,0 +1,19 @@
+COPILOT_HOME=C:\SPB_Data\.copilot
+COPILOT_MODEL=gpt-5
+
+BRIDGE_API_KEY=replace-with-a-long-random-secret
+HOST=127.0.0.1
+PORT=8787
+
+GITHUB_TOKEN=github_pat_replace_with_your_token
+GITHUB_OWNER=112703028
+GITHUB_REPO=copilot-request-queue
+GITHUB_ALLOWED_USERS=112703028
+POLL_INTERVAL_MS=30000
+
+# --- 家裡端 MCP relay (mcp-relay.mjs / npm run mcp) ---
+# 只需要下列三個(與上面共用):
+#   GITHUB_TOKEN  家裡個人 PAT, 需 queue repo 的 Issues read/write
+#   GITHUB_OWNER  queue repo 擁有者(預設 112703028)
+#   GITHUB_REPO   queue repo 名稱(預設 copilot-request-queue)
+# 目標專案必須是 public repo(公司 EMU 帳號只能讀取 public)。
