@@ -35,4 +35,9 @@
 - **diff 圍欄格式**:目前擷取器只認 ```` ```diff ```` 圍欄。若真實 e2e 發現
   Copilot 常用其他圍欄(```` ``` ````/```` ```patch ````),需放寬 `patch-extract.mjs` 的正則。
 - **大 patch**:超過 GitHub comment 上限時目前不處理(YAGNI)。
-- **ask_copilot**:純問答工具尚未實作。
+- **純問答 ask_copilot**:尚未實作(改 code 的追問走 copilot_patch_followup)。
+
+## 追問(copilot_patch_followup)
+
+初次 `copilot_patch` 後,用 `copilot_patch_followup({ issueNumber, task })` 對同一 Issue 追問。
+已 e2e 驗證:對 Issue 追問時 Copilot 延續前文,回傳含先前+新增的完整 patch(git apply 可套用)。

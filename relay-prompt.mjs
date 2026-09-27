@@ -17,3 +17,19 @@ export function buildPatchTaskBody({ repo, task }) {
     task,
   ].join("\n");
 }
+
+export function buildFollowupTaskBody({ task }) {
+  return [
+    "這是延續上一輪的追問。你在先前的對話中已對某個 public repo 產生過 diff。",
+    "請在先前修改的基礎上,依下面的追問完成調整,並回傳**完整的新 patch**",
+    "(包含先前的修改 + 這次的調整,讓我可以直接對乾淨的 repo 套用一份 diff)。",
+    "",
+    "若先前 clone 的暫存目錄已刪除,請重新 clone 同一個 repo,重現先前的修改後再加上這次的調整。",
+    "把完整 diff 放在一個 ```diff 圍欄區塊中貼回。",
+    "**不要 push、不要開 PR。若任何步驟失敗,請照實貼出錯誤訊息。**",
+    "",
+    "---",
+    "追問:",
+    task,
+  ].join("\n");
+}

@@ -583,9 +583,17 @@ npm run mcp
 | Tool | 用途 |
 |---|---|
 | `copilot_patch({ repo, task, timeoutSeconds? })` | 派 Copilot 對 public repo 做修改,回傳 `{ patch, issueNumber }`;逾時回 `{ status: "pending", issueNumber }` |
+| `copilot_patch_followup({ issueNumber, task, timeoutSeconds? })` | 對同一個 Issue 追問,延續 Copilot 上下文,回傳**完整的新 patch**(含先前修改 + 這次調整) |
 | `check_patch({ issueNumber })` | 逾時後補查該 Issue 是否已有 patch |
 
 拿到 patch 後,由家裡 Claude **先展示給你、確認後才 `git apply`**,不自動套用。
+
+### 追問(延續對話)
+
+初次 `copilot_patch` 回傳 `issueNumber` 後,用 `copilot_patch_followup` 帶同一個
+`issueNumber` 追問。因為是**同一個 Issue**,poller 會用 `resumeSession` 讓 Copilot
+延續前一輪的上下文,並回傳一份**完整的新 patch**(包含之前的修改 + 這次的調整),
+家裡直接對乾淨專案套用即可。不同 Issue 之間不共享記憶。
 
 詳見 [`docs/patch-relay-smoke.md`](docs/patch-relay-smoke.md) 的手動驗證步驟。
 

@@ -30,6 +30,20 @@ server.tool(
 );
 
 server.tool(
+  "copilot_patch_followup",
+  "對先前 copilot_patch 的同一個 Issue 追問,延續 Copilot 上下文,回傳完整的新 patch。",
+  {
+    issueNumber: z.number().describe("先前 copilot_patch 回傳的 issueNumber"),
+    task: z.string().describe("追問內容(在先前修改基礎上的調整)"),
+    timeoutSeconds: z.number().optional().describe("等待上限秒數, 預設 180"),
+  },
+  async ({ issueNumber, task, timeoutSeconds = 180 }) => {
+    const r = await relay.requestFollowupPatch({ issueNumber, task, timeoutMs: timeoutSeconds * 1000 });
+    return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+  },
+);
+
+server.tool(
   "check_patch",
   "查詢先前 copilot_patch 逾時的 Issue 是否已有 patch。",
   {

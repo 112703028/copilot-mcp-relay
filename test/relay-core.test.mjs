@@ -72,3 +72,34 @@ test("requestPatch: 回覆無 diff 圍欄則 status error 帶 raw", async () => 
   assert.equal(r.status, "error");
   assert.match(r.raw, /clone 失敗/);
 });
+
+test("requestFollowupPatch: 只認留言後出現的新 patch(忽略舊回覆)", async () => {
+  const OLD = `${M}\n\`\`\`diff\nOLD PATCH\n\`\`\``;
+  const NEW = `${M}\n\`\`\`diff\nNEW PATCH\n\`\`\``;
+  const script = [
+    // GET 現有 comments(記 baseline): 已有一則舊 patch id=50
+    [{ id: 50, body: OLD }],
+    // POST 追問 comment
+    { id: 51 },
+    // GET 輪詢: 舊的還在,新的還沒
+    [{ id: 50, body: OLD }],
+    // GET 輪詢: 新 patch 出現 id=60
+    [{ id: 50, body: OLD }, { id: 60, body: NEW }],
+  ];
+  const { request, calls } = fakeRequest(script);
+  const relay = createRelay({ request, owner: "o", repo: "q", sleep: async () => {} });
+  const r = await relay.requestFollowupPatch({ issueNumber: 9, task: "再加 X", timeoutMs: 10000, pollMs: 1 });
+  assert.equal(r.issueNumber, 9);
+  assert.match(r.patch, /NEW PATCH/);
+  assert.doesNotMatch(r.patch, /OLD PATCH/);
+  // 應有一次 POST(留追問 comment)
+  assert.equal(calls.some((c) => c.method === "POST"), true);
+});
+
+test("requestFollowupPatch: task 為空回 invalid 且不留言", async () => {
+  const { request, calls } = fakeRequest([[]]);
+  const relay = createRelay({ request, owner: "o", repo: "q", sleep: async () => {} });
+  const r = await relay.requestFollowupPatch({ issueNumber: 1, task: "  ", timeoutMs: 10, pollMs: 1 });
+  assert.equal(r.status, "invalid");
+  assert.equal(calls.some((c) => c.method === "POST"), false);
+});
