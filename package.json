@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node test-copilot.mjs",
-    "test:unit": "node --test test/",
+    "test:unit": "node --test test/*.test.mjs",
     "start": "node server.mjs",
     "poll": "node github-poller.mjs",
     "mcp": "node mcp-relay.mjs"
