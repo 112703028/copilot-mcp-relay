@@ -19,6 +19,22 @@ function fakeRequest(script) {
   };
 }
 
+test("requestPatch: task 為空則回 invalid 且不開 Issue", async () => {
+  const { request, calls } = fakeRequest([{ number: 1 }]);
+  const relay = createRelay({ request, owner: "o", repo: "q", sleep: async () => {} });
+  const r = await relay.requestPatch({ repo: "o/t", task: "   ", timeoutMs: 10, pollMs: 1 });
+  assert.equal(r.status, "invalid");
+  assert.equal(calls.length, 0); // 未開 Issue
+});
+
+test("requestPatch: task 過長(>4000)則回 invalid 且不開 Issue", async () => {
+  const { request, calls } = fakeRequest([{ number: 1 }]);
+  const relay = createRelay({ request, owner: "o", repo: "q", sleep: async () => {} });
+  const r = await relay.requestPatch({ repo: "o/t", task: "x".repeat(4001), timeoutMs: 10, pollMs: 1 });
+  assert.equal(r.status, "invalid");
+  assert.equal(calls.length, 0);
+});
+
 test("requestPatch: 開 Issue 後輪詢拿到 patch", async () => {
   const script = [
     // POST 建 Issue

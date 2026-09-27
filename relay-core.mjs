@@ -1,6 +1,8 @@
 import { buildPatchTaskBody } from "./relay-prompt.mjs";
 import { extractPatch } from "./patch-extract.mjs";
-import { findNewResponse, maxCommentId } from "./find-response.mjs";
+import { findNewResponse } from "./find-response.mjs";
+
+const MAX_TASK_LENGTH = 4000;
 
 export function createRelay({ request, owner, repo, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   async function createIssue(task, targetRepo) {
@@ -35,6 +37,9 @@ export function createRelay({ request, owner, repo, sleep = (ms) => new Promise(
   }
 
   async function requestPatch({ repo: targetRepo, task, timeoutMs = 180000, pollMs = 4000 }) {
+    if (typeof task !== "string" || task.trim() === "" || task.length > MAX_TASK_LENGTH) {
+      return { status: "invalid", reason: `task 必須是 1 到 ${MAX_TASK_LENGTH} 字元的非空字串` };
+    }
     const issueNumber = await createIssue(task, targetRepo);
     const result = await pollForResponse(issueNumber, 0, timeoutMs, pollMs);
     if (result.status === "ready") return { patch: result.patch, issueNumber };
