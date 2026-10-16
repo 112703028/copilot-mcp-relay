@@ -10,6 +10,8 @@ const ALLOWED_COMMANDS = new Set([
   "new-item", "remove-item", "write-output",
 ]);
 const FORBIDDEN_GIT = /\bgit\b[^|;&\n]*\s(push|config|credential|remote|submodule)\b/i;
+// 這些 git 參數本身就能執行任意指令 (例如 git -c core.pager='...' diff), 不論子指令為何都拒絕
+const FORBIDDEN_GIT_OPTIONS = /\bgit\b[^|;&\n]*\s(-c\s|-c$|--config-env\b|--upload-pack\b|--receive-pack\b|--exec\b|-u\s)/i;
 const ALLOWED_URL = /^https:\/\/github\.com\//i;
 
 export function createWorkerPermissionPolicy({ workRoot }) {
@@ -30,6 +32,7 @@ export function createWorkerPermissionPolicy({ workRoot }) {
       if (!ALLOWED_COMMANDS.has(identifier.toLowerCase())) return reject(`command not allowed: ${identifier}`);
     }
     if (FORBIDDEN_GIT.test(text)) return reject("git push/config/credential/remote/submodule are not allowed");
+    if (FORBIDDEN_GIT_OPTIONS.test(text)) return reject("git options that can execute commands (-c, --upload-pack, ...) are not allowed");
     const urls = [
       ...(request.possibleUrls ?? []).map((u) => u.url),
       ...(text.match(/\bhttps?:\/\/\S+/gi) ?? []),
