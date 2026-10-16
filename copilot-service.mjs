@@ -2,6 +2,7 @@ import "dotenv/config";
 import { homedir } from "node:os";
 import path from "node:path";
 import { CopilotClient, approveAll } from "@github/copilot-sdk";
+import { createAskCopilot } from "./copilot-ask.mjs";
 
 function toWindowsPath(value) {
   const msysPath = value.match(/^\/([a-zA-Z])\/(.*)$/);
@@ -19,21 +20,11 @@ const sessionConfig = {
   onPermissionRequest: approveAll,
 };
 
-export async function askCopilot(prompt, sessionId) {
-  const session = sessionId
-    ? await client.resumeSession(sessionId, sessionConfig)
-    : await client.createSession(sessionConfig);
-
-  try {
-    const response = await session.sendAndWait({ prompt });
-    if (!response) {
-      throw new Error("Copilot completed without an assistant message");
-    }
-    return { answer: response.data.content, sessionId: session.sessionId };
-  } finally {
-    await session.disconnect();
-  }
-}
+export const askCopilot = createAskCopilot({
+  client,
+  sessionConfig,
+  timeoutMs: Number(process.env.COPILOT_TIMEOUT_MS ?? 600_000),
+});
 
 export async function stopCopilot() {
   await client.stop();

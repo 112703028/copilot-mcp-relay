@@ -1,6 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { askCopilot, stopCopilot } from "./copilot-service.mjs";
 import { createGitHubClient } from "./github-client.mjs";
+import { createPoller } from "./poller-core.mjs";
 
 const token = process.env.GITHUB_TOKEN;
 const owner = process.env.GITHUB_OWNER ?? "112703028";
@@ -9,15 +10,15 @@ const allowedUsers = new Set(
   (process.env.GITHUB_ALLOWED_USERS ?? owner).split(",").map((value) => value.trim()).filter(Boolean),
 );
 const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS ?? 30_000);
+const maxFailures = Number(process.env.MAX_FAILURES ?? 3);
 const statePath = new URL("./github-poller-state.json", import.meta.url);
-const responseMarker = "<!-- copilot-bridge-response -->";
 let stopping = false;
 
 if (!token) {
   throw new Error("GITHUB_TOKEN is required");
 }
 
-const { request: github } = createGitHubClient({ token });
+const { request } = createGitHubClient({ token });
 
 async function loadState() {
   try {
@@ -34,80 +35,21 @@ async function saveState(state) {
   await rename(temporaryPath, statePath);
 }
 
-async function addComment(issueNumber, body) {
-  await github(`/repos/${owner}/${repo}/issues/${issueNumber}/comments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ body: `${responseMarker}\n${body.slice(0, 60_000)}` }),
-  });
-}
-
-async function processIssue(issue, state) {
-  if (!allowedUsers.has(issue.user.login)) return;
-
-  const key = String(issue.number);
-  const issueState = state.issues[key] ?? {
-    sessionId: undefined,
-    initialProcessed: false,
-    lastCommentId: 0,
-  };
-  let prompt;
-  let processedCommentId = issueState.lastCommentId;
-
-  if (!issueState.initialProcessed) {
-    prompt = issue.body;
-  } else {
-    const comments = await github(`/repos/${owner}/${repo}/issues/${issue.number}/comments?per_page=100`);
-    const comment = comments.find(
-      (item) =>
-        item.id > issueState.lastCommentId &&
-        allowedUsers.has(item.user.login) &&
-        !item.body.startsWith(responseMarker),
-    );
-    if (!comment) return;
-    prompt = comment.body;
-    processedCommentId = comment.id;
-  }
-
-  if (typeof prompt !== "string" || prompt.trim() === "" || prompt.length > 4_000) {
-    await addComment(issue.number, "Request rejected: prompt must contain 1 to 4,000 characters.");
-    issueState.initialProcessed = true;
-    issueState.lastCommentId = processedCommentId;
-    state.issues[key] = issueState;
-    await saveState(state);
-    return;
-  }
-
-  console.log(`Processing ${owner}/${repo}#${issue.number}`);
-  const result = await askCopilot(prompt, issueState.sessionId);
-  await addComment(issue.number, result.answer);
-
-  issueState.sessionId = result.sessionId;
-  issueState.initialProcessed = true;
-  issueState.lastCommentId = processedCommentId;
-  state.issues[key] = issueState;
-  await saveState(state);
-}
-
-async function poll() {
-  const state = await loadState();
-  const issues = await github(
-    `/repos/${owner}/${repo}/issues?state=open&labels=copilot-request&sort=created&direction=asc&per_page=20`,
-  );
-
-  for (const issue of issues) {
-    if (stopping) return;
-    if (!issue.pull_request) {
-      await processIssue(issue, state);
-    }
-  }
-}
+const poller = createPoller({
+  request,
+  owner,
+  repo,
+  allowedUsers,
+  askCopilot,
+  store: { load: loadState, save: saveState },
+  maxFailures,
+});
 
 async function main() {
   console.log(`Polling ${owner}/${repo} every ${pollIntervalMs / 1000} seconds`);
   while (!stopping) {
     try {
-      await poll();
+      await poller.poll({ isStopping: () => stopping });
     } catch (error) {
       console.error(error.message);
     }
