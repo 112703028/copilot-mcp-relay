@@ -9,6 +9,7 @@ function invalidTask(task) {
 }
 
 export function createRelay({ request, owner, repo, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  const baselines = new Map(); // issueNumber → 最近一次追問的 baseline comment id
   async function createIssue(task, targetRepo) {
     const body = buildPatchTaskBody({ repo: targetRepo, task });
     const issue = await request(`/repos/${owner}/${repo}/issues`, {
@@ -71,11 +72,14 @@ export function createRelay({ request, owner, repo, sleep = (ms) => new Promise(
     // 先記 baseline: 留言前現有的最大 comment id,之後只認新出現的回覆(避免抓到上一輪舊 patch)
     const baselineId = maxCommentId(await getComments(issueNumber));
     await addComment(issueNumber, buildFollowupTaskBody({ task }));
+    // 記住這輪的 baseline, 逾時後 checkPatch 才不會拿到上一輪的舊 patch
+    baselines.set(issueNumber, baselineId);
     const result = await pollForResponse(issueNumber, baselineId, timeoutMs, pollMs);
-    return toResult(result, issueNumber);
+    const out = toResult(result, issueNumber);
+    return out.status === "pending" ? { ...out, baselineId } : out;
   }
 
-  async function checkPatch({ issueNumber, baselineId = 0 }) {
+  async function checkPatch({ issueNumber, baselineId = baselines.get(issueNumber) ?? 0 }) {
     const comments = await getComments(issueNumber);
     const found = findNewResponse(comments, baselineId);
     if (!found) return { status: "pending" };

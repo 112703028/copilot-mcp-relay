@@ -96,6 +96,58 @@ test("requestFollowupPatch: 只認留言後出現的新 patch(忽略舊回覆)",
   assert.equal(calls.some((c) => c.method === "POST"), true);
 });
 
+// 可變的 comments 狀態: GET 回傳目前清單, POST 留言加入一則非回覆的 comment
+function liveIssue(initial) {
+  const comments = [...initial];
+  let nextId = 1000;
+  const request = async (path, options) => {
+    if (options?.method === "POST") {
+      const c = { id: nextId++, body: JSON.parse(options.body).body };
+      comments.push(c);
+      return c;
+    }
+    return [...comments];
+  };
+  return { request, comments };
+}
+
+test("checkPatch: 追問逾時後再查, 回傳追問的新 patch 而非舊 patch", async () => {
+  const OLD = `${M}\n\`\`\`diff\nOLD PATCH\n\`\`\``;
+  const NEW = `${M}\n\`\`\`diff\nNEW PATCH\n\`\`\``;
+  const issue = liveIssue([{ id: 50, body: OLD }]);
+  const relay = createRelay({ request: issue.request, owner: "o", repo: "q", sleep: async () => {} });
+
+  const pending = await relay.requestFollowupPatch({ issueNumber: 9, task: "再加 X", timeoutMs: 5, pollMs: 1 });
+  assert.equal(pending.status, "pending");
+
+  issue.comments.push({ id: 2000, body: NEW }); // Copilot 稍後才回覆
+  const r = await relay.checkPatch({ issueNumber: 9 });
+
+  assert.equal(r.status, "ready");
+  assert.match(r.patch, /NEW PATCH/);
+});
+
+test("checkPatch: 追問逾時、新回覆還沒出現時回 pending (不回舊 patch)", async () => {
+  const OLD = `${M}\n\`\`\`diff\nOLD PATCH\n\`\`\``;
+  const issue = liveIssue([{ id: 50, body: OLD }]);
+  const relay = createRelay({ request: issue.request, owner: "o", repo: "q", sleep: async () => {} });
+
+  await relay.requestFollowupPatch({ issueNumber: 9, task: "再加 X", timeoutMs: 5, pollMs: 1 });
+  const r = await relay.checkPatch({ issueNumber: 9 });
+
+  assert.equal(r.status, "pending");
+});
+
+test("requestFollowupPatch: 逾時回傳 baselineId, 供 checkPatch 明確指定", async () => {
+  const OLD = `${M}\n\`\`\`diff\nOLD PATCH\n\`\`\``;
+  const issue = liveIssue([{ id: 50, body: OLD }]);
+  const relay = createRelay({ request: issue.request, owner: "o", repo: "q", sleep: async () => {} });
+
+  const pending = await relay.requestFollowupPatch({ issueNumber: 9, task: "再加 X", timeoutMs: 5, pollMs: 1 });
+
+  assert.equal(pending.baselineId, 50);
+});
+
 test("requestFollowupPatch: task 為空回 invalid 且不留言", async () => {
   const { request, calls } = fakeRequest([[]]);
   const relay = createRelay({ request, owner: "o", repo: "q", sleep: async () => {} });

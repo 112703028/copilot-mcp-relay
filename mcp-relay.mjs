@@ -45,12 +45,16 @@ server.tool(
 
 server.tool(
   "check_patch",
-  "查詢先前 copilot_patch 逾時的 Issue 是否已有 patch。",
+  "查詢先前 copilot_patch 或 copilot_patch_followup 逾時的 Issue 是否已有 patch。",
   {
     issueNumber: z.number().describe("copilot_patch 回傳的 issueNumber"),
+    baselineId: z
+      .number()
+      .optional()
+      .describe("copilot_patch_followup 逾時時回傳的 baselineId; 只認這之後的回覆。省略時用本次 session 記住的值"),
   },
-  async ({ issueNumber }) => {
-    const r = await relay.checkPatch({ issueNumber });
+  async ({ issueNumber, baselineId }) => {
+    const r = await relay.checkPatch({ issueNumber, baselineId });
     return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
   },
 );
