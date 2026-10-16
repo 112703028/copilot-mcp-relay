@@ -262,6 +262,29 @@ test("requestFollowupPatch: 追問拿到的 patch 也會驗證", async () => {
   assert.equal(r.verification.repairRounds, 1);
 });
 
+test("requestFollowupPatch: Issue 超過 100 則 comment 時, baseline 仍取到最新的 id (分頁)", async () => {
+  const comments = Array.from({ length: 150 }, (_, i) => ({
+    id: i + 1,
+    body: i === 149 ? `${M}\n\`\`\`diff\nOLD PATCH\n\`\`\`` : `c${i + 1}`,
+  }));
+  const request = async (path, options) => {
+    if (options?.method === "POST") {
+      comments.push({ id: 1000, body: JSON.parse(options.body).body });
+      return {};
+    }
+    const url = new URL(path, "https://x");
+    const perPage = Number(url.searchParams.get("per_page") ?? 30);
+    const page = Number(url.searchParams.get("page") ?? 1);
+    return comments.slice((page - 1) * perPage, page * perPage);
+  };
+  const relay = createRelay({ request, owner: "o", repo: "q", sleep: async () => {} });
+
+  const r = await relay.requestFollowupPatch({ issueNumber: 9, task: "more", timeoutMs: 5, pollMs: 1 });
+
+  assert.equal(r.status, "pending"); // 新回覆還沒出現, 不能把 id 150 的舊 patch 當成答案
+  assert.equal(r.baselineId, 150);
+});
+
 test("requestFollowupPatch: task 為空回 invalid 且不留言", async () => {
   const { request, calls } = fakeRequest([[]]);
   const relay = createRelay({ request, owner: "o", repo: "q", sleep: async () => {} });

@@ -44,7 +44,12 @@ export function createRelay({
   }
 
   async function getComments(issueNumber) {
-    return request(`/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`);
+    const all = [];
+    for (let page = 1; ; page++) {
+      const batch = await request(`/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100&page=${page}`);
+      all.push(...batch);
+      if (batch.length < 100) return all;
+    }
   }
 
   function classify(comment) {
