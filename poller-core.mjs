@@ -1,3 +1,5 @@
+import { MAX_PROMPT_LENGTH } from "./limits.mjs";
+
 const responseMarker = "<!-- copilot-bridge-response -->";
 
 export function createPoller({
@@ -65,8 +67,8 @@ export function createPoller({
       processedCommentId = comment.id;
     }
 
-    if (typeof prompt !== "string" || prompt.trim() === "" || prompt.length > 4_000) {
-      await addComment(issue.number, "Request rejected: prompt must contain 1 to 4,000 characters.");
+    if (typeof prompt !== "string" || prompt.trim() === "" || prompt.length > MAX_PROMPT_LENGTH) {
+      await addComment(issue.number, `Request rejected: prompt must contain 1 to ${MAX_PROMPT_LENGTH} characters.`);
       issueState.initialProcessed = true;
       issueState.lastCommentId = processedCommentId;
       state.issues[key] = issueState;

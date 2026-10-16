@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createPoller } from "../poller-core.mjs";
+import { buildPatchTaskBody } from "../relay-prompt.mjs";
 
 const M = "<!-- copilot-bridge-response -->";
 
@@ -73,6 +74,21 @@ test("poll: 新 Issue 交給 Copilot, 回覆帶 marker, state 記下 sessionId",
   assert.equal(gh.posted[0].body, `${M}\ndone`);
   assert.equal(store.get().issues["1"].sessionId, "s1");
   assert.equal(store.get().issues["1"].initialProcessed, true);
+});
+
+test("poll: relay 送來的最長 task (含模板) 不會被 poller 拒絕", async () => {
+  const body = buildPatchTaskBody({ repo: "o/t", task: "x".repeat(4000) });
+  const gh = fakeGitHub({ issues: [issue(1, body)] });
+  const prompts = [];
+  const poller = makePoller({
+    gh, store: memoryStore(),
+    askCopilot: async (prompt) => { prompts.push(prompt); return { answer: "ok", sessionId: "s" }; },
+  });
+
+  await poller.poll();
+
+  assert.equal(prompts.length, 1);
+  assert.doesNotMatch(gh.posted[0].body, /rejected/);
 });
 
 test("poll: 一個 Issue 失敗不影響同輪後面的 Issue", async () => {

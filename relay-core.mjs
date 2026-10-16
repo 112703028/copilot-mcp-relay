@@ -2,7 +2,7 @@ import { buildPatchTaskBody, buildFollowupTaskBody } from "./relay-prompt.mjs";
 import { extractPatch } from "./patch-extract.mjs";
 import { findNewResponse, maxCommentId } from "./find-response.mjs";
 
-const MAX_TASK_LENGTH = 4000;
+import { MAX_TASK_LENGTH } from "./limits.mjs";
 
 function invalidTask(task) {
   return typeof task !== "string" || task.trim() === "" || task.length > MAX_TASK_LENGTH;
