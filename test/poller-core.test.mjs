@@ -19,9 +19,20 @@ function fakeGitHub({ issues, commentsByIssue = {} }) {
       return {};
     }
     if (m) return commentsByIssue[m[1]] ?? [];
-    return issues;
+    return typeof issues === "function" ? issues(path) : issues;
   };
   return { request, posted };
+}
+
+// 模擬 GitHub 列 Issue 的排序與分頁: 依 query 的 sort / direction / per_page 回傳
+function githubListSemantics(issues) {
+  return (path) => {
+    const params = new URL(path, "https://x").searchParams;
+    const field = params.get("sort") === "updated" ? "updated_at" : "created_at";
+    const sign = params.get("direction") === "asc" ? 1 : -1;
+    const perPage = Number(params.get("per_page") ?? 30);
+    return [...issues].sort((a, b) => sign * (a[field] - b[field])).slice(0, perPage);
+  };
 }
 
 function memoryStore(initial = { issues: {} }) {
@@ -79,6 +90,52 @@ test("poll: 一個 Issue 失敗不影響同輪後面的 Issue", async () => {
 
   assert.deepEqual(gh.posted.map((p) => p.issue), [2]);
   assert.equal(store.get().issues["1"].failCount, 1);
+});
+
+test("poll: 累積超過一頁的舊 Issue 後, 新 Issue 仍會被處理", async () => {
+  // 30 個已處理完、仍 open 的舊 Issue, 加上 1 個最新的
+  const old = Array.from({ length: 30 }, (_, i) => ({
+    ...issue(i + 1, `old ${i + 1}`), created_at: i, updated_at: i,
+  }));
+  const fresh = { ...issue(31, "new task"), created_at: 100, updated_at: 100 };
+  const gh = fakeGitHub({ issues: githubListSemantics([...old, fresh]) });
+  const processed = Object.fromEntries(
+    old.map((o) => [String(o.number), { sessionId: "x", initialProcessed: true, lastCommentId: 0, failCount: 0 }]),
+  );
+  const store = memoryStore({ issues: processed });
+  const prompts = [];
+  const poller = makePoller({
+    gh, store,
+    askCopilot: async (prompt) => { prompts.push(prompt); return { answer: "ok", sessionId: "s" }; },
+  });
+
+  await poller.poll();
+
+  assert.deepEqual(prompts, ["new task"]);
+});
+
+test("poll: 很舊的 Issue 收到新追問時仍會被處理", async () => {
+  const issues = Array.from({ length: 30 }, (_, i) => ({
+    ...issue(i + 1, `old ${i + 1}`), created_at: i, updated_at: i,
+  }));
+  issues[0].updated_at = 100; // #1 是最早建立的, 但剛收到追問
+  const gh = fakeGitHub({
+    issues: githubListSemantics(issues),
+    commentsByIssue: { 1: [{ id: 500, body: "follow-up", user: { login: "me" } }] },
+  });
+  const processed = Object.fromEntries(
+    issues.map((o) => [String(o.number), { sessionId: "x", initialProcessed: true, lastCommentId: 0, failCount: 0 }]),
+  );
+  const store = memoryStore({ issues: processed });
+  const prompts = [];
+  const poller = makePoller({
+    gh, store,
+    askCopilot: async (prompt) => { prompts.push(prompt); return { answer: "ok", sessionId: "x" }; },
+  });
+
+  await poller.poll();
+
+  assert.deepEqual(prompts, ["follow-up"]);
 });
 
 test("poll: 失敗後重試成功, failCount 歸零", async () => {

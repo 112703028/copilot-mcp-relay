@@ -88,11 +88,13 @@ export function createPoller({
 
   async function poll({ isStopping = () => false } = {}) {
     const state = await store.load();
+    // Issue 不會被關閉 (之後還能追問), 依建立時間排序的話, 舊 Issue 累積滿一頁後新任務永遠排不進來。
+    // 改取最近有更新的 (新 Issue 或新追問都會更新 updated_at), 再由舊到新處理。
     const issues = await github(
-      `/repos/${owner}/${repo}/issues?state=open&labels=copilot-request&sort=created&direction=asc&per_page=20`,
+      `/repos/${owner}/${repo}/issues?state=open&labels=copilot-request&sort=updated&direction=desc&per_page=20`,
     );
 
-    for (const issue of issues) {
+    for (const issue of [...issues].reverse()) {
       if (isStopping()) return;
       if (issue.pull_request) continue;
       try {
