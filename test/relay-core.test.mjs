@@ -148,6 +148,120 @@ test("requestFollowupPatch: 逾時回傳 baselineId, 供 checkPatch 明確指定
   assert.equal(pending.baselineId, 50);
 });
 
+// 模擬 Copilot 依序回覆: 開 Issue 後回 replies[0], 之後每則追問回下一則
+function scriptedCopilot(replies) {
+  const comments = [];
+  const followups = [];
+  let nextId = 1;
+  let replyIndex = 0;
+  const reply = () => {
+    if (replyIndex < replies.length) comments.push({ id: nextId++, body: `${M}\n${replies[replyIndex++]}` });
+  };
+  const request = async (path, options) => {
+    if (options?.method === "POST" && path.endsWith("/issues")) {
+      reply();
+      return { number: 1 };
+    }
+    if (options?.method === "POST") {
+      const body = JSON.parse(options.body).body;
+      comments.push({ id: nextId++, body });
+      followups.push(body);
+      reply();
+      return {};
+    }
+    return [...comments];
+  };
+  return { request, followups };
+}
+
+const fence = (s) => `\`\`\`diff\n${s}\n\`\`\``;
+
+test("requestPatch: patch 驗證通過時直接回傳, 並註明驗證等級", async () => {
+  const cp = scriptedCopilot([fence("GOOD")]);
+  const relay = createRelay({
+    request: cp.request, owner: "o", repo: "q", sleep: async () => {},
+    verifyPatch: async (patch) => (patch === "GOOD" ? { ok: true, level: "git-apply-check" } : { ok: false, reason: "bad" }),
+  });
+
+  const r = await relay.requestPatch({ repo: "o/t", task: "t", timeoutMs: 1000, pollMs: 1 });
+
+  assert.equal(r.patch, "GOOD");
+  assert.deepEqual(r.verification, { level: "git-apply-check", repairRounds: 0 });
+  assert.equal(cp.followups.length, 0);
+});
+
+test("requestPatch: 驗證失敗時自動追問修正, 帶上錯誤原因", async () => {
+  const cp = scriptedCopilot([fence("BAD"), fence("GOOD")]);
+  const relay = createRelay({
+    request: cp.request, owner: "o", repo: "q", sleep: async () => {},
+    verifyPatch: async (patch) => (patch === "GOOD" ? { ok: true, level: "git-apply-check" } : { ok: false, reason: "patch does not apply: a.txt" }),
+  });
+
+  const r = await relay.requestPatch({ repo: "o/t", task: "t", timeoutMs: 1000, pollMs: 1 });
+
+  assert.equal(r.patch, "GOOD");
+  assert.equal(r.verification.repairRounds, 1);
+  assert.equal(cp.followups.length, 1);
+  assert.match(cp.followups[0], /patch does not apply: a\.txt/);
+});
+
+test("requestPatch: 修正輪數用完仍失敗, 回 invalid-patch 並附原因與最後的 patch", async () => {
+  const cp = scriptedCopilot([fence("BAD1"), fence("BAD2")]);
+  const relay = createRelay({
+    request: cp.request, owner: "o", repo: "q", sleep: async () => {},
+    verifyPatch: async () => ({ ok: false, reason: "nope" }),
+  });
+
+  const r = await relay.requestPatch({ repo: "o/t", task: "t", timeoutMs: 1000, pollMs: 1, maxRepairRounds: 1 });
+
+  assert.equal(r.status, "invalid-patch");
+  assert.equal(r.reason, "nope");
+  assert.equal(r.patch, "BAD2");
+  assert.equal(r.issueNumber, 1);
+});
+
+test("requestPatch: verifyIn 會傳給驗證函式", async () => {
+  const cp = scriptedCopilot([fence("GOOD")]);
+  const seen = [];
+  const relay = createRelay({
+    request: cp.request, owner: "o", repo: "q", sleep: async () => {},
+    verifyPatch: async (patch, ctx) => { seen.push(ctx); return { ok: true, level: "git-apply-check" }; },
+  });
+
+  await relay.requestPatch({ repo: "o/t", task: "t", timeoutMs: 1000, pollMs: 1, verifyIn: "C:/src/t" });
+
+  assert.deepEqual(seen, [{ verifyIn: "C:/src/t" }]);
+});
+
+test("requestPatch: 本機驗證環境出錯時回 verify-error, 不追問 Copilot", async () => {
+  const cp = scriptedCopilot([fence("GOOD")]);
+  const relay = createRelay({
+    request: cp.request, owner: "o", repo: "q", sleep: async () => {},
+    verifyPatch: async () => { throw new Error("spawn git ENOENT"); },
+  });
+
+  const r = await relay.requestPatch({ repo: "o/t", task: "t", timeoutMs: 1000, pollMs: 1, verifyIn: "C:/missing" });
+
+  assert.equal(r.status, "verify-error");
+  assert.match(r.reason, /ENOENT/);
+  assert.equal(r.patch, "GOOD");
+  assert.equal(cp.followups.length, 0);
+});
+
+test("requestFollowupPatch: 追問拿到的 patch 也會驗證", async () => {
+  const cp = scriptedCopilot([fence("FIRST"), fence("BAD"), fence("GOOD")]);
+  const relay = createRelay({
+    request: cp.request, owner: "o", repo: "q", sleep: async () => {},
+    verifyPatch: async (patch) => (patch === "BAD" ? { ok: false, reason: "bad" } : { ok: true, level: "format" }),
+  });
+  await relay.requestPatch({ repo: "o/t", task: "t", timeoutMs: 1000, pollMs: 1 });
+
+  const r = await relay.requestFollowupPatch({ issueNumber: 1, task: "more", timeoutMs: 1000, pollMs: 1 });
+
+  assert.equal(r.patch, "GOOD");
+  assert.equal(r.verification.repairRounds, 1);
+});
+
 test("requestFollowupPatch: task 為空回 invalid 且不留言", async () => {
   const { request, calls } = fakeRequest([[]]);
   const relay = createRelay({ request, owner: "o", repo: "q", sleep: async () => {} });
