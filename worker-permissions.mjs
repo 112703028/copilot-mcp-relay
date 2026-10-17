@@ -13,6 +13,21 @@ const FORBIDDEN_GIT = /\bgit\b[^|;&\n]*\s(push|config|credential|remote|submodul
 // 這些 git 參數本身就能執行任意指令 (例如 git -c core.pager='...' diff), 不論子指令為何都拒絕
 const FORBIDDEN_GIT_OPTIONS = /\bgit\b[^|;&\n]*\s(-c\s|-c$|--config-env\b|--upload-pack\b|--receive-pack\b|--exec\b|-u\s)/i;
 const ALLOWED_URL = /^https:\/\/github\.com\//i;
+// 指令替換會在允許的指令裡偷偷執行別的指令, 例如 echo $(curl ...)
+const COMMAND_SUBSTITUTION = /\$\(|`/;
+
+// 不相信 runtime 回報的 identifier 格式 (實測是整段指令文字, 而非執行檔名稱),
+// 自己依 ; | && || 換行切段, 取每段第一個字, 去掉路徑與 .exe 等副檔名
+export function commandNames(text) {
+  return text
+    .split(/\r?\n|;|&&|\|\||\|/)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => {
+      const first = segment.startsWith('"') ? segment.slice(1, segment.indexOf('"', 1)) : segment.split(/\s+/)[0];
+      return first.split(/[\\/]/).pop().replace(/\.(exe|cmd|bat)$/i, "").toLowerCase();
+    });
+}
 
 export function createWorkerPermissionPolicy({ workRoot }) {
   const root = path.resolve(workRoot);
@@ -28,9 +43,10 @@ export function createWorkerPermissionPolicy({ workRoot }) {
 
   function decideShell(request) {
     const text = request.fullCommandText ?? "";
-    for (const { identifier } of request.commands ?? []) {
-      if (!ALLOWED_COMMANDS.has(identifier.toLowerCase())) return reject(`command not allowed: ${identifier}`);
-    }
+    if (COMMAND_SUBSTITUTION.test(text)) return reject("command substitution ($( ) or backticks) is not allowed");
+    const names = [text, ...(request.commands ?? []).map((c) => c.identifier)].flatMap(commandNames);
+    const disallowed = names.find((name) => !ALLOWED_COMMANDS.has(name));
+    if (disallowed) return reject(`command not allowed: ${disallowed}`);
     if (FORBIDDEN_GIT.test(text)) return reject("git push/config/credential/remote/submodule are not allowed");
     if (FORBIDDEN_GIT_OPTIONS.test(text)) return reject("git options that can execute commands (-c, --upload-pack, ...) are not allowed");
     const urls = [

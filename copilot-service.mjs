@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { CopilotClient, approveAll } from "@github/copilot-sdk";
-import { createAskCopilot } from "./copilot-ask.mjs";
+import { createAskCopilot, copilotRuntimeEnv } from "./copilot-ask.mjs";
 import { createWorkerPermissionPolicy } from "./worker-permissions.mjs";
 
 function toWindowsPath(value) {
@@ -13,7 +13,7 @@ function toWindowsPath(value) {
 
 const configuredCopilotHome = process.env.COPILOT_HOME ?? path.join(process.env.HOME ?? homedir(), ".copilot");
 const copilotHome = toWindowsPath(configuredCopilotHome);
-const client = new CopilotClient({ baseDirectory: copilotHome, logLevel: "error" });
+const client = new CopilotClient({ baseDirectory: copilotHome, logLevel: "error", env: copilotRuntimeEnv(process.env) });
 
 await client.start();
 

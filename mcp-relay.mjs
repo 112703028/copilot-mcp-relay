@@ -20,7 +20,9 @@ const verifyParams = {
   verifyIn: z
     .string()
     .optional()
-    .describe("本機目標 repo 的路徑; 給了就用 git apply --check 驗證 patch 能否套用(請先同步到遠端預設分支)。省略時只檢查格式"),
+    .describe(
+      "本機目標 repo 的路徑; 給了就用 git apply --check 驗證能否套用, 並比對 index 行的 hash 確認 diff 真的由 git 產生、不是 Copilot 手寫的(請先同步到遠端預設分支)。省略時只檢查格式",
+    ),
   maxRepairRounds: z
     .number()
     .optional()

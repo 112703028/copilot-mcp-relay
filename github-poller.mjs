@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { readFile } from "node:fs/promises";
 import { askCopilot, stopCopilot } from "./copilot-service.mjs";
 import { createGitHubClient } from "./github-client.mjs";
