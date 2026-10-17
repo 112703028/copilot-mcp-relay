@@ -1,3 +1,10 @@
+// Copilot runtime 看到 GITHUB_TOKEN / GH_TOKEN 會優先拿來登入, 而不是用 `copilot login` 存的憑證。
+// poller 的 GITHUB_TOKEN 是只能讀寫 queue repo 的 PAT, 拿去登入 Copilot 會得到 Authorization error。
+export function copilotRuntimeEnv(env) {
+  const { GITHUB_TOKEN, GH_TOKEN, ...rest } = env;
+  return rest;
+}
+
 export function createAskCopilot({ client, sessionConfig, timeoutMs }) {
   return async function askCopilot(prompt, sessionId) {
     const session = sessionId
