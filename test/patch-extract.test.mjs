@@ -20,6 +20,13 @@ test("無 diff 圍欄則 ok:false 並帶 raw", () => {
   assert.match(r.raw, /clone 失敗/);
 });
 
+test("新格式回覆的 meta 行不會出現在 raw 裡", () => {
+  const body = `${MARKER}\n<!-- copilot-bridge-meta for=issue session=abc -->\nRequest failed after 3 attempts: boom`;
+  const r = extractPatch(body);
+  assert.equal(r.ok, false);
+  assert.equal(r.raw, "Request failed after 3 attempts: boom");
+});
+
 test("多個 diff 圍欄取第一個", () => {
   const body = `${MARKER}\n\`\`\`diff\nFIRST\n\`\`\`\n\`\`\`diff\nSECOND\n\`\`\``;
   const r = extractPatch(body);
