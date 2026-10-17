@@ -69,11 +69,13 @@ test("verifyPatch: 沒給 verifyIn 只做格式檢查", async () => {
   assert.equal((await verifyPatch("", {})).ok, false);
 });
 
-test("verifyPatch: 給 verifyIn 時再用 git apply --check 驗證", async () => {
+test("verifyPatch: 給 verifyIn 時用 git apply --check 驗證, 套不上就不通過", async () => {
   const dir = await tempRepo();
   try {
-    assert.deepEqual(await verifyPatch(GOOD, { verifyIn: dir }), { ok: true, level: "git-apply-check" });
-    assert.equal((await verifyPatch(STALE, { verifyIn: dir })).ok, false);
+    // 能套用時的通過情況 (含來源驗證) 見 provenance.test.mjs
+    const r = await verifyPatch(STALE, { verifyIn: dir });
+    assert.equal(r.ok, false);
+    assert.match(r.reason, /a\.txt/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
