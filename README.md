@@ -55,7 +55,7 @@ sequenceDiagram
 | `copilot-service.mjs` | 啟動 Copilot SDK、建立或恢復 session、傳送 prompt |
 | `server.mjs` | 本機 HTTP server，提供 `/health` 和 `/ask` |
 | `github-poller.mjs` | 輪詢 GitHub Issues、處理任務、寫回 comment |
-| `github-poller-state.json` | 執行時產生，保存 Issue 與 Copilot session 的對應關係 |
+| `request-ledger.mjs` | 從 Issue 的 comment 紀錄算出還沒回覆的請求與 Copilot session |
 | `test-copilot.mjs` | Copilot CLI/SDK smoke test |
 | `.env` | 本機秘密與設定，不可提交到 Git |
 | `environment.example.txt` | `.env` 的無秘密範本 |
@@ -269,29 +269,24 @@ client.resumeSession(sessionId)
 
 ## 記憶如何保存
 
-Poller 將狀態保存在本機 `github-poller-state.json`：
+Poller 不保存本機狀態，Issue 的 comment 紀錄就是唯一事實來源。每則回覆的前兩行標明它回應的請求與 Copilot session：
 
-```json
-{
-  "issues": {
-    "1": {
-      "sessionId": "copilot-session-id",
-      "initialProcessed": true,
-      "lastCommentId": 123456789
-    }
-  }
-}
+```
+<!-- copilot-bridge-response -->
+<!-- copilot-bridge-meta for=comment:123456789 session=copilot-session-id -->
+（回答內容）
 ```
 
-欄位用途：
+- `for`：回應的請求。`issue` 代表 Issue 本文，`comment:<id>` 代表該則追問。
+- `session`：恢復 Copilot 對話用的 session id。
 
-- `sessionId`：恢復 Copilot 對話。
-- `initialProcessed`：避免重複處理 Issue body。
-- `lastCommentId`：避免重複處理相同追問。
+每次輪詢時，Poller 依 comment 順序比對請求與回覆，找出最早一則還沒回覆的請求來處理（見 `request-ledger.mjs`）。因此：
 
-狀態會先寫入 `github-poller-state.tmp`，再 rename 成正式檔案，降低寫入中斷導致 JSON 損壞的風險。兩個狀態檔都已加入 `.gitignore`。
+- Poller 重啟、當機或換一台機器執行，都不會重複處理已回覆的請求，追問也能接續原本的 session。
+- 回覆送出前當機的話，該請求會在下次輪詢時重新處理。
+- 拒絕與失敗訊息也會標明 `for`，同一則請求不會被反覆拒絕或重試。
 
-刪除 `github-poller-state.json` 會清除 Poller 的 Issue/session 對應。若 Issue 仍保持 open 且帶 label，下次啟動可能重新處理 Issue body，因此刪除前應先停止 Poller並移除 label 或關閉 Issue。
+舊版 Poller 的回覆沒有 meta 行，會依先進先出對應到最早一則未回覆的請求。舊版留下的 `github-poller-state.json` 只在啟動時讀取其中的 `sessionId`，讓舊 Issue 的追問能接續原本的對話；新版不再寫入這個檔案。
 
 ## 本機 HTTP API
 

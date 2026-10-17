@@ -1,5 +1,11 @@
 COPILOT_HOME=C:\SPB_Data\.copilot
 COPILOT_MODEL=gpt-5
+# 單次 Copilot 回覆的等待上限(毫秒); SDK 預設只有 60 秒, clone + 改 code 常不夠
+COPILOT_TIMEOUT_MS=600000
+# Copilot 的工作目錄; worker 只允許在這裡面 clone / 讀 / 寫 (預設為系統暫存目錄下的 copilot-bridge-work)
+# COPILOT_WORK_DIR=C:\copilot-bridge-work
+# 權限模式: 預設 restricted (白名單); 白名單擋到正常操作時可暫時設成 approve-all
+# COPILOT_PERMISSION_MODE=restricted
 
 BRIDGE_API_KEY=replace-with-a-long-random-secret
 HOST=127.0.0.1
@@ -10,6 +16,8 @@ GITHUB_OWNER=112703028
 GITHUB_REPO=copilot-request-queue
 GITHUB_ALLOWED_USERS=112703028
 POLL_INTERVAL_MS=30000
+# 同一個 Issue 連續失敗幾次後放棄, 並在 Issue 留言回報錯誤
+MAX_FAILURES=3
 
 # --- 家裡端 MCP relay (mcp-relay.mjs / npm run mcp) ---
 # 只需要下列三個(與上面共用):
